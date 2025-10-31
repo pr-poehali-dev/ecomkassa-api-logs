@@ -29,8 +29,10 @@ export const LogsTable = ({
   onLogClick,
 }: LogsTableProps) => {
   const filteredLogs = logs.filter(log => {
+    const requestBody = JSON.stringify(log.request.body || {}).toLowerCase();
     const matchesSearch = log.endpoint.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         log.method.toLowerCase().includes(searchQuery.toLowerCase());
+                         log.method.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         requestBody.includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || 
                          (filterStatus === 'success' && log.status >= 200 && log.status < 300) ||
                          (filterStatus === 'error' && log.status >= 400);
@@ -45,7 +47,7 @@ export const LogsTable = ({
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <Input
-              placeholder="Search logs... (endpoint, method)"
+              placeholder="Search logs... (endpoint, method, INN, receipt data)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-background border-border"
