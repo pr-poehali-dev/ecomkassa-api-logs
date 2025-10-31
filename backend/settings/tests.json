@@ -1,0 +1,36 @@
+{
+  "tests": [
+    {
+      "name": "Test GET without member_id",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Test POST create settings",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "member_id": "test_member_123",
+        "ecom_login": "test@example.com",
+        "company_inn": "7707083893"
+      },
+      "expectedStatus": 201,
+      "expectedBody": {
+        "success": true
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Test OPTIONS for CORS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

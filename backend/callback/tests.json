@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Test missing parameters",
+      "method": "GET",
+      "path": "/?external_id=test123",
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Test OPTIONS for CORS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
