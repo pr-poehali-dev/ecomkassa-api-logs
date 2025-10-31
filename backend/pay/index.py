@@ -91,6 +91,23 @@ def create_bill(member_id: str, payment_id: int, paysystem_id: int, deal_id: int
     
     return bill_id
 
+def log_integration(log_type: str, member_id: str, deal_id: str, external_id: str, 
+                    request_data: str, response_data: str, status: str, error_message: str = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    query = '''
+        INSERT INTO integration_logs (log_type, member_id, deal_id, external_id, 
+                                      request_data, response_data, status, error_message)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    '''
+    cur.execute(query, (log_type, member_id, deal_id, external_id, 
+                        request_data, response_data, status, error_message))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
 def create_ecomkassa_payment(settings: Dict[str, Any], payment_data: PaymentRequest, external_id: str, callback_url: str) -> Dict[str, Any]:
     token = settings.get('token_ecom_kassa')
     if not token:
@@ -124,16 +141,26 @@ def create_ecomkassa_payment(settings: Dict[str, Any], payment_data: PaymentRequ
         'callback_url': callback_url
     }
     
+    log_integration('ecomkassa_request', payment_data.member_id, str(payment_data.dealid), 
+                   external_id, json.dumps(payload), '', 'sent')
+    
     response = requests.post(
         'https://api.ecomkassa.ru/api/v1/queue',
         json=payload,
         timeout=15
     )
     
+    response_data = response.json() if response.status_code == 200 else response.text
+    
     if response.status_code != 200:
+        log_integration('ecomkassa_response', payment_data.member_id, str(payment_data.dealid), 
+                       external_id, '', str(response_data), 'error', f'HTTP {response.status_code}')
         raise Exception(f'EcomKassa API error: {response.text}')
     
-    return response.json()
+    log_integration('ecomkassa_response', payment_data.member_id, str(payment_data.dealid), 
+                   external_id, '', json.dumps(response_data), 'success')
+    
+    return response_data
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     method: str = event.get('httpMethod', 'GET')

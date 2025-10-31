@@ -43,6 +43,23 @@ def get_bill_by_external_id(external_id: str, secret: str) -> Optional[Dict[str,
         'webhook_url': row[6]
     }
 
+def log_integration(log_type: str, member_id: str, deal_id: str, external_id: str, 
+                    request_data: str, response_data: str, status: str, error_message: str = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    query = '''
+        INSERT INTO integration_logs (log_type, member_id, deal_id, external_id, 
+                                      request_data, response_data, status, error_message)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    '''
+    cur.execute(query, (log_type, member_id, deal_id, external_id, 
+                        request_data, response_data, status, error_message))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
 def update_bill_status(bill_id: int, status: str):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -57,23 +74,41 @@ def update_bill_status(bill_id: int, status: str):
     cur.close()
     conn.close()
 
-def mark_payment_as_paid_bitrix24(payment_id: int, webhook_url: str) -> bool:
+def mark_payment_as_paid_bitrix24(payment_id: int, webhook_url: str, member_id: str, deal_id: int, external_id: str) -> bool:
     try:
-        response = requests.get(
-            f'{webhook_url}/rest/sale.paysystem.pay.payment',
-            params={'ID': payment_id},
-            timeout=10
-        )
+        url = f'{webhook_url}/rest/sale.paysystem.pay.payment'
+        params = {'ID': payment_id}
+        
+        log_integration('bitrix24_request', member_id, str(deal_id), external_id, 
+                       f'{url}?ID={payment_id}', '', 'sent')
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        log_integration('bitrix24_response', member_id, str(deal_id), external_id, 
+                       '', str(response.status_code), 'success' if response.status_code == 200 else 'error')
+        
         return response.status_code == 200
-    except:
+    except Exception as e:
+        log_integration('bitrix24_response', member_id, str(deal_id), external_id, 
+                       '', '', 'error', str(e))
         return False
 
-def call_custom_webhook(webhook_url: str, deal_id: int) -> bool:
+def call_custom_webhook(webhook_url: str, deal_id: int, member_id: str, external_id: str) -> bool:
     try:
         url = webhook_url.replace('{{ID}}', str(deal_id))
+        
+        log_integration('webhook_request', member_id, str(deal_id), external_id, 
+                       url, '', 'sent')
+        
         response = requests.get(url, timeout=10)
+        
+        log_integration('webhook_response', member_id, str(deal_id), external_id, 
+                       '', str(response.status_code), 'success' if response.status_code == 200 else 'error')
+        
         return response.status_code == 200
-    except:
+    except Exception as e:
+        log_integration('webhook_response', member_id, str(deal_id), external_id, 
+                       '', '', 'error', str(e))
         return False
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -131,14 +166,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
+        log_integration('callback_received', bill['member_id'], str(bill['deal_id']), external_id, 
+                       json.dumps(params), '', 'processing')
+        
         success = False
         
         if bill['webhook_url'] and '{{ID}}' in bill['webhook_url']:
-            success = call_custom_webhook(bill['webhook_url'], bill['deal_id'])
+            success = call_custom_webhook(bill['webhook_url'], bill['deal_id'], bill['member_id'], external_id)
         elif bill['payment_id']:
             bitrix_webhook = bill.get('webhook_url', '').split('/rest/')[0]
             if bitrix_webhook:
-                success = mark_payment_as_paid_bitrix24(bill['payment_id'], bitrix_webhook)
+                success = mark_payment_as_paid_bitrix24(bill['payment_id'], bitrix_webhook, 
+                                                        bill['member_id'], bill['deal_id'], external_id)
         
         if success:
             update_bill_status(bill['id'], 'paid')
