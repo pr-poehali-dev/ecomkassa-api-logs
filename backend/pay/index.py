@@ -91,6 +91,23 @@ def create_bill(member_id: str, payment_id: int, paysystem_id: int, deal_id: int
     
     return bill_id
 
+def cleanup_old_logs():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    query = '''
+        DELETE FROM integration_logs 
+        WHERE created_at < NOW() - INTERVAL '30 days'
+    '''
+    cur.execute(query)
+    deleted_count = cur.rowcount
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return deleted_count
+
 def log_integration(log_type: str, member_id: str, deal_id: str, external_id: str, 
                     request_data: str, response_data: str, status: str, error_message: str = None):
     conn = get_db_connection()
@@ -163,6 +180,8 @@ def create_ecomkassa_payment(settings: Dict[str, Any], payment_data: PaymentRequ
     return response_data
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    cleanup_old_logs()
+    
     method: str = event.get('httpMethod', 'GET')
     
     if method == 'OPTIONS':

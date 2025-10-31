@@ -43,6 +43,23 @@ def get_bill_by_external_id(external_id: str, secret: str) -> Optional[Dict[str,
         'webhook_url': row[6]
     }
 
+def cleanup_old_logs():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    query = '''
+        DELETE FROM integration_logs 
+        WHERE created_at < NOW() - INTERVAL '30 days'
+    '''
+    cur.execute(query)
+    deleted_count = cur.rowcount
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return deleted_count
+
 def log_integration(log_type: str, member_id: str, deal_id: str, external_id: str, 
                     request_data: str, response_data: str, status: str, error_message: str = None):
     conn = get_db_connection()
@@ -112,6 +129,8 @@ def call_custom_webhook(webhook_url: str, deal_id: int, member_id: str, external
         return False
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    cleanup_old_logs()
+    
     method: str = event.get('httpMethod', 'GET')
     
     if method == 'OPTIONS':
